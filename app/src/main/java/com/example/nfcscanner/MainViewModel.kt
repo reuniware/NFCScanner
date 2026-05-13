@@ -19,23 +19,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
 
-    private val _lastDetectedTag = MutableStateFlow<String?>(null)
-    val lastDetectedTag: StateFlow<String?> = _lastDetectedTag.asStateFlow()
+    private val _lastDetectedTag = MutableStateFlow<NfcDevice?>(null)
+    val lastDetectedTag: StateFlow<NfcDevice?> = _lastDetectedTag.asStateFlow()
 
     fun setScanning(scanning: Boolean) {
         _isScanning.value = scanning
     }
 
-    fun addDevice(serialNumber: String, techList: String, extraInfo: String) {
+    fun addDevice(serialNumber: String, techList: String, extraInfo: String, content: String) {
         viewModelScope.launch {
-            nfcDeviceDao.insert(
-                NfcDevice(
-                    serialNumber = serialNumber,
-                    techList = techList,
-                    extraInfo = extraInfo
-                )
+            val device = NfcDevice(
+                serialNumber = serialNumber,
+                techList = techList,
+                extraInfo = extraInfo,
+                content = content
             )
-            _lastDetectedTag.value = serialNumber
+            nfcDeviceDao.insert(device)
+            _lastDetectedTag.value = device
         }
     }
 

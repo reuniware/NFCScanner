@@ -2,6 +2,7 @@ package com.example.nfcscanner
 
 import android.nfc.NfcAdapter
 import android.nfc.Tag
+import android.nfc.tech.Ndef
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -106,14 +107,35 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
             val serialNumber = it.id.joinToString(":") { byte -> "%02X".format(byte) }
             val techList = it.techList.joinToString(", ") { tech -> tech.split(".").last() }
             
-            // Collect any additional info if possible
+            val content = readNdefContent(it)
             val extraInfo = "ID Length: ${it.id.size} bytes"
             
-            viewModel.addDevice(serialNumber, techList, extraInfo)
+            viewModel.addDevice(serialNumber, techList, extraInfo, content)
             
             runOnUiThread {
                 Toast.makeText(this, "Tag Detected: $serialNumber", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    private fun readNdefContent(tag: Tag): String {
+        val ndef = Ndef.get(tag) ?: return "Pas de données NDEF"
+        return try {
+            ndef.connect()
+            val ndefMessage = ndef.ndefMessage
+            ndef.close()
+            ndefMessage?.records?.joinToString("\n") { record ->
+                val payload = record.payload
+                if (payload.isNotEmpty()) {
+                    // Pour les records TEXT, le premier octet contient le statut (longueur du code langue)
+                    // On simplifie ici pour afficher le contenu lisible
+                    val textEncoding = if ((payload[0].toInt() and 128) == 0) "UTF-8" else "UTF-16"
+                    val languageCodeLength = payload[0].toInt() and 63
+                    String(payload, languageCodeLength + 1, payload.size - languageCodeLength - 1, charset(textEncoding))
+                } else ""
+            } ?: "NDEF Vide"
+        } catch (e: Exception) {
+            "Erreur de lecture : ${e.localizedMessage}"
         }
     }
 
@@ -186,14 +208,17 @@ fun HomeScreen(viewModel: MainViewModel) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        lastDetectedTag?.let {
+        lastDetectedTag?.let { device ->
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = CardDefaults.cardElevation(4.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Last Detected:", fontWeight = FontWeight.Bold)
-                    Text(it, style = MaterialTheme.typography.bodyLarge)
+                    Text("Dernière détection :", fontWeight = FontWeight.Bold)
+                    Text("ID: ${device.serialNumber}", style = MaterialTheme.typography.bodyLarge)
+                    if (device.content.isNotEmpty()) {
+                        Text("Contenu: ${device.content}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
         }
@@ -255,6 +280,21 @@ fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat) {
             Text(text = "Serial: ${device.serialNumber}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text(text = "Technologies: ${device.techList}", style = MaterialTheme.typography.bodySmall)
             Text(text = "Extra: ${device.extraInfo}", style = MaterialTheme.typography.bodySmall)
+            if (device.content.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(text = "Contenu:", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = device.content,
+                        modifier = Modifier.padding(8.dp),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "Detected at: ${dateFormat.format(Date(device.timestamp))}",

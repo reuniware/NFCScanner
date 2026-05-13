@@ -9,5 +9,6 @@ data class NfcDevice(
     val serialNumber: String,
     val techList: String,
     val timestamp: Long = System.currentTimeMillis(),
-    val extraInfo: String = ""
+    val extraInfo: String = "",
+    val content: String = ""
 )
