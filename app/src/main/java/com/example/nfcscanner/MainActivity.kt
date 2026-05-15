@@ -2,8 +2,10 @@ package com.example.nfcscanner
 
 import android.nfc.NfcAdapter
 import android.nfc.Tag
+import android.nfc.tech.MifareClassic
 import android.nfc.tech.Ndef
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -37,6 +39,7 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
 
     private val viewModel: MainViewModel by viewModels()
     private var nfcAdapter: NfcAdapter? = null
+    private var mifareKeys: List<ByteArray> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,6 +49,8 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
         if (nfcAdapter == null) {
             Toast.makeText(this, "NFC is not available on this device", Toast.LENGTH_LONG).show()
         }
+
+        mifareKeys = loadKeysFromAssets()
 
         setContent {
             NFCScannerTheme {
@@ -107,7 +112,16 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
             val serialNumber = it.id.joinToString(":") { byte -> "%02X".format(byte) }
             val techList = it.techList.joinToString(", ") { tech -> tech.split(".").last() }
             
-            val content = readNdefContent(it)
+            var content = readNdefContent(it)
+            
+            // Si pas de NDEF ou vide, et que c'est du Mifare Classic, on tente les clés
+            if ((content == "Pas de données NDEF" || content == "NDEF Vide") && it.techList.contains(MifareClassic::class.java.name)) {
+                val mifareContent = readMifareClassicContent(it)
+                if (mifareContent.isNotEmpty()) {
+                    content = mifareContent
+                }
+            }
+
             val extraInfo = "ID Length: ${it.id.size} bytes"
             
             viewModel.addDevice(serialNumber, techList, extraInfo, content)
@@ -116,6 +130,88 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                 Toast.makeText(this, "Tag Detected: $serialNumber", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    private fun loadKeysFromAssets(): List<ByteArray> {
+        val keys = mutableSetOf<String>()
+        val files = listOf("std.keys", "hotel-std.keys", "extended-std.keys")
+        
+        files.forEach { fileName ->
+            try {
+                assets.open(fileName).bufferedReader().useLines { lines ->
+                    lines.forEach { line ->
+                        val cleanLine = line.trim()
+                        if (cleanLine.isNotEmpty() && !cleanLine.startsWith("#") && cleanLine.length == 12) {
+                            keys.add(cleanLine.uppercase())
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("NFCScanner", "Error loading $fileName", e)
+            }
+        }
+        
+        return keys.map { hexToByteArray(it) }
+    }
+
+    private fun hexToByteArray(s: String): ByteArray {
+        val len = s.length
+        val data = ByteArray(len / 2)
+        for (i in 0 until len step 2) {
+            data[i / 2] = ((Character.digit(s[i], 16) shl 4) + Character.digit(s[i + 1], 16)).toByte()
+        }
+        return data
+    }
+
+    private fun readMifareClassicContent(tag: Tag): String {
+        val mifare = MifareClassic.get(tag) ?: return ""
+        val sb = StringBuilder()
+        
+        try {
+            mifare.connect()
+            val sectorCount = mifare.sectorCount
+            sb.append("Mifare Classic (${mifare.size} bytes)\n")
+            
+            for (i in 0 until sectorCount) {
+                var authenticated = false
+                // On essaie chaque clé du dictionnaire
+                for (key in mifareKeys) {
+                    if (mifare.authenticateSectorWithKeyA(i, key)) {
+                        authenticated = true
+                        sb.append("Sector $i: Authenticated (Key A)\n")
+                        break
+                    } else if (mifare.authenticateSectorWithKeyB(i, key)) {
+                        authenticated = true
+                        sb.append("Sector $i: Authenticated (Key B)\n")
+                        break
+                    }
+                }
+                
+                if (authenticated) {
+                    val blockCount = mifare.getBlockCountInSector(i)
+                    val firstBlock = mifare.sectorToBlock(i)
+                    for (j in 0 until blockCount) {
+                        try {
+                            val data = mifare.readBlock(firstBlock + j)
+                            val hexData = data.joinToString("") { "%02X".format(it) }
+                            val asciiData = String(data).map { if (it in ' '..'~') it else '.' }.joinToString("")
+                            sb.append("  Block ${firstBlock + j}: $hexData [$asciiData]\n")
+                        } catch (e: Exception) {
+                            sb.append("  Block ${firstBlock + j}: Error reading\n")
+                        }
+                    }
+                } else {
+                    sb.append("Sector $i: Authentication failed\n")
+                }
+            }
+            mifare.close()
+        } catch (e: Exception) {
+            sb.append("Mifare Error: ${e.localizedMessage}")
+        } finally {
+            try { mifare.close() } catch (e: Exception) {}
+        }
+        
+        return sb.toString()
     }
 
     private fun readNdefContent(tag: Tag): String {
