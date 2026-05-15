@@ -169,10 +169,17 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
         
         try {
             mifare.connect()
+            mifare.timeout = 5000 // Augmente le timeout à 5 secondes pour les scans longs
             val sectorCount = mifare.sectorCount
             sb.append("Mifare Classic (${mifare.size} bytes)\n")
             
             for (i in 0 until sectorCount) {
+                if (!mifare.isConnected) {
+                    try { mifare.connect() } catch (e: Exception) {
+                        sb.append("Connection lost at Sector $i\n")
+                        break
+                    }
+                }
                 var authenticated = false
                 // On essaie chaque clé du dictionnaire
                 for (key in mifareKeys) {
