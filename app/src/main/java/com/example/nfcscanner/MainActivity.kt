@@ -178,16 +178,15 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                 for (key in mifareKeys) {
                     if (mifare.authenticateSectorWithKeyA(i, key)) {
                         authenticated = true
-                        sb.append("Sector $i: Authenticated (Key A)\n")
                         break
                     } else if (mifare.authenticateSectorWithKeyB(i, key)) {
                         authenticated = true
-                        sb.append("Sector $i: Authenticated (Key B)\n")
                         break
                     }
                 }
                 
                 if (authenticated) {
+                    sb.append("Sector $i: Authenticated (Key A)\n")
                     val blockCount = mifare.getBlockCountInSector(i)
                     val firstBlock = mifare.sectorToBlock(i)
                     for (j in 0 until blockCount) {
