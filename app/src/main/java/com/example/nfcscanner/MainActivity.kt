@@ -5,6 +5,7 @@ import android.nfc.Tag
 import android.nfc.tech.MifareClassic
 import android.nfc.tech.Ndef
 import android.os.Bundle
+import android.os.Environment
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -32,6 +33,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.nfcscanner.data.NfcDevice
 import com.example.nfcscanner.ui.theme.NFCScannerTheme
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -125,10 +128,27 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
             val extraInfo = "ID Length: ${it.id.size} bytes"
             
             viewModel.addDevice(serialNumber, techList, extraInfo, content)
+            saveScanToDownload(serialNumber, content)
             
             runOnUiThread {
                 Toast.makeText(this, "Tag Detected: $serialNumber", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    private fun saveScanToDownload(serialNumber: String, content: String) {
+        try {
+            val fileName = "NFC_Scan_${serialNumber.replace(":", "")}_${System.currentTimeMillis()}.txt"
+            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val file = File(downloadsDir, fileName)
+            
+            FileOutputStream(file).use { fos ->
+                val data = "Serial: $serialNumber\n\n$content"
+                fos.write(data.toByteArray())
+            }
+            Log.d("NFCScanner", "File saved: ${file.absolutePath}")
+        } catch (e: Exception) {
+            Log.e("NFCScanner", "Error saving file", e)
         }
     }
 
@@ -183,11 +203,14 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                 var authenticated = false
                 // On essaie chaque clé du dictionnaire
                 for (key in mifareKeys) {
+                    val keyHex = key.joinToString("") { "%02X".format(it) }
                     if (mifare.authenticateSectorWithKeyA(i, key)) {
                         authenticated = true
+                        sb.append("Sector $i: Authenticated (Key A: $keyHex)\n")
                         break
                     } else if (mifare.authenticateSectorWithKeyB(i, key)) {
                         authenticated = true
+                        sb.append("Sector $i: Authenticated (Key B: $keyHex)\n")
                         break
                     }
                 }
