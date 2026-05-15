@@ -11,9 +11,12 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -50,6 +53,10 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
     private var nfcAdapter: NfcAdapter? = null
     private var mifareKeys: List<ByteArray> = emptyList()
     private val foundKeysCache = mutableSetOf<String>()
+
+    private val importLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { importScanFromFile(it) }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,7 +98,9 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                             HomeScreen(viewModel)
                         }
                         composable("history") {
-                            HistoryScreen(viewModel)
+                            HistoryScreen(viewModel) {
+                                importLauncher.launch("text/plain")
+                            }
                         }
                     }
                 }
@@ -162,7 +171,7 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
             val extraInfo = "ID Length: ${it.id.size} bytes"
             
             viewModel.addDevice(serialNumber, techList, extraInfo, content, rawData)
-            saveScanToDownload(serialNumber, content)
+            saveScanToDownload(serialNumber, content, rawData)
             
             runOnUiThread {
                 Toast.makeText(this, "Tag Detected: $serialNumber", Toast.LENGTH_SHORT).show()
@@ -170,19 +179,48 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
         }
     }
 
-    private fun saveScanToDownload(serialNumber: String, content: String) {
+    private fun saveScanToDownload(serialNumber: String, content: String, rawData: String?) {
         try {
             val fileName = "NFC_Scan_${serialNumber.replace(":", "")}_${System.currentTimeMillis()}.txt"
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
             val file = File(downloadsDir, fileName)
             
             FileOutputStream(file).use { fos ->
-                val data = "Serial: $serialNumber\n\n$content"
-                fos.write(data.toByteArray())
+                val data = StringBuilder()
+                data.append("Serial: $serialNumber\n\n")
+                data.append(content)
+                if (rawData != null) {
+                    data.append("\n\n--- INTERNAL RAW DATA (DO NOT MODIFY) ---\n")
+                    data.append(rawData)
+                }
+                fos.write(data.toString().toByteArray())
             }
             Log.d("NFCScanner", "File saved: ${file.absolutePath}")
         } catch (e: Exception) {
             Log.e("NFCScanner", "Error saving file", e)
+        }
+    }
+
+    private fun importScanFromFile(uri: android.net.Uri) {
+        try {
+            contentResolver.openInputStream(uri)?.use { inputStream ->
+                val text = inputStream.bufferedReader().readText()
+                val serialMatch = Regex("Serial: ([0-9A-F:]+)").find(text)
+                val serial = serialMatch?.groupValues?.get(1) ?: "Unknown"
+                
+                val rawDataSection = text.split("--- INTERNAL RAW DATA (DO NOT MODIFY) ---")
+                if (rawDataSection.size > 1) {
+                    val rawData = rawDataSection[1].trim()
+                    val content = rawDataSection[0].replace("Serial: $serial", "").trim()
+                    
+                    viewModel.addDevice(serial, "Imported Mifare", "Imported from file", content, rawData)
+                    Toast.makeText(this, "Scan importé avec succès", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Fichier invalide : Données brutes manquantes", Toast.LENGTH_LONG).show()
+                }
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Erreur import : ${e.localizedMessage}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -458,7 +496,7 @@ fun HomeScreen(viewModel: MainViewModel) {
 }
 
 @Composable
-fun HistoryScreen(viewModel: MainViewModel) {
+fun HistoryScreen(viewModel: MainViewModel, onImportClick: () -> Unit) {
     val devices by viewModel.allDevices.collectAsState(initial = emptyList())
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
 
@@ -473,13 +511,18 @@ fun HistoryScreen(viewModel: MainViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Detected Devices",
+                text = "History",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold
             )
             
-            TextButton(onClick = { viewModel.clearHistory() }) {
-                Text("Clear All")
+            Row {
+                TextButton(onClick = onImportClick) {
+                    Text("Import")
+                }
+                TextButton(onClick = { viewModel.clearHistory() }) {
+                    Text("Clear")
+                }
             }
         }
         
@@ -506,11 +549,13 @@ fun HistoryScreen(viewModel: MainViewModel) {
 fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat, viewModel: MainViewModel) {
     val selectedForCompare by viewModel.selectedForCompare.collectAsState()
     val isSelectedForCompare = selectedForCompare?.id == device.id
+    var isExpanded by remember { mutableStateOf(false) }
     
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 4.dp)
+            .clickable { isExpanded = !isExpanded },
         elevation = CardDefaults.cardElevation(if (isSelectedForCompare) 8.dp else 2.dp),
         border = if (isSelectedForCompare) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
     ) {
@@ -522,7 +567,7 @@ fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat, viewModel: MainV
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = "Serial: ${device.serialNumber}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    Text(text = "Technologies: ${device.techList}", style = MaterialTheme.typography.bodySmall)
+                    Text(text = dateFormat.format(Date(device.timestamp)), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                 }
                 
                 Row {
@@ -534,8 +579,6 @@ fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat, viewModel: MainV
                                     viewModel.setSelectedForCompare(device)
                                 } else if (selectedForCompare?.id == device.id) {
                                     viewModel.setSelectedForCompare(null)
-                                } else {
-                                    // Effectuer la comparaison (logique d'affichage à intégrer)
                                 }
                             }
                         ) {
@@ -571,41 +614,41 @@ fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat, viewModel: MainV
                 }
             }
 
-            Text(text = "Extra: ${device.extraInfo}", style = MaterialTheme.typography.bodySmall)
-            
-            // Affichage de la comparaison si un autre badge est sélectionné
-            if (selectedForCompare != null && selectedForCompare?.id != device.id && device.rawData != null && selectedForCompare?.rawData != null) {
-                ComparisonView(selectedForCompare!!, device)
-            } else if (device.content.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(text = "Contenu:", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = MaterialTheme.shapes.small,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = device.content,
-                        modifier = Modifier.padding(8.dp),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+            AnimatedVisibility(visible = isExpanded || isSelectedForCompare) {
+                Column {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(text = "Technologies: ${device.techList}", style = MaterialTheme.typography.bodySmall)
+                    Text(text = "Extra: ${device.extraInfo}", style = MaterialTheme.typography.bodySmall)
+                    
+                    // Affichage de la comparaison si un autre badge est sélectionné
+                    if (selectedForCompare != null && selectedForCompare?.id != device.id && device.rawData != null && selectedForCompare?.rawData != null) {
+                        ComparisonView(selectedForCompare!!, device)
+                    } else if (device.content.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(text = "Contenu:", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = device.content,
+                                modifier = Modifier.padding(8.dp),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                    
+                    if (viewModel.pendingRestore.collectAsState().value == device.rawData) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "⚠️ Mode Restauration activé. Activez le scan et présentez le badge pour réécrire les données.",
+                            color = Color.Red,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                 }
             }
-            
-            if (viewModel.pendingRestore.collectAsState().value == device.rawData) {
-                Text(
-                    "⚠️ Mode Restauration activé. Activez le scan et présentez le badge pour réécrire les données.",
-                    color = Color.Red,
-                    style = MaterialTheme.typography.labelSmall
-                )
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Detected at: ${dateFormat.format(Date(device.timestamp))}",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.Gray
-            )
         }
     }
 }
