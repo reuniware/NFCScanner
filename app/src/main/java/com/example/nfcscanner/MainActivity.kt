@@ -33,6 +33,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.nfcscanner.data.NfcDevice
 import com.example.nfcscanner.ui.theme.NFCScannerTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -116,19 +119,36 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
             val serialNumber = it.id.joinToString(":") { byte -> "%02X".format(byte) }
             val techList = it.techList.joinToString(", ") { tech -> tech.split(".").last() }
             
+            // Mode RESTAURATION
+            val restoreData = viewModel.pendingRestore.value
+            if (restoreData != null) {
+                runOnUiThread { Toast.makeText(this, "Restauration en cours...", Toast.LENGTH_SHORT).show() }
+                val results = mutableListOf<String>()
+                restoreData.split(";").forEach { blockInfo ->
+                    results.add(writeMifareBlock(it, blockInfo))
+                }
+                viewModel.setPendingRestore(null) // Reset après tentative
+                runOnUiThread { 
+                    Toast.makeText(this, "Résultat : ${results.last()}", Toast.LENGTH_LONG).show()
+                }
+                return@let // On s'arrête là pour ne pas ré-enregistrer le scan
+            }
+
             var content = readNdefContent(it)
+            var rawData: String? = null
             
             // Si pas de NDEF ou vide, et que c'est du Mifare Classic, on tente les clés
             if ((content == "Pas de données NDEF" || content == "NDEF Vide") && it.techList.contains(MifareClassic::class.java.name)) {
-                val mifareContent = readMifareClassicContent(it)
-                if (mifareContent.isNotEmpty()) {
-                    content = mifareContent
+                val result = readMifareClassicWithRawData(it)
+                if (result.first.isNotEmpty()) {
+                    content = result.first
+                    rawData = result.second
                 }
             }
 
             val extraInfo = "ID Length: ${it.id.size} bytes"
             
-            viewModel.addDevice(serialNumber, techList, extraInfo, content)
+            viewModel.addDevice(serialNumber, techList, extraInfo, content, rawData)
             saveScanToDownload(serialNumber, content)
             
             runOnUiThread {
@@ -184,13 +204,10 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
         return data
     }
 
-    private fun readMifareClassicContent(tag: Tag): String {
-        val mifare = MifareClassic.get(tag) ?: return ""
+    private fun readMifareClassicWithRawData(tag: Tag): Pair<String, String?> {
+        val mifare = MifareClassic.get(tag) ?: return Pair("", null)
         val sb = StringBuilder()
-        
-        // On vide le cache des clés trouvées pour un nouveau tag physique
-        // ou on le garde si on veut accélérer les scans de badges identiques à la suite
-        // Restons sur un cache par session d'application pour maximiser la vitesse.
+        val rawDataList = mutableListOf<String>()
         
         try {
             mifare.connect()
@@ -209,12 +226,8 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                 var authKeyType = ""
                 var usedKey = ""
 
-                // 1. On prépare la liste des clés à tester
-                // On met en priorité les clés qui ont déjà fonctionné (Cache)
                 val keysToTest = mutableListOf<ByteArray>()
                 foundKeysCache.forEach { keysToTest.add(hexToByteArray(it)) }
-                
-                // On ajoute les clés du dictionnaire (en évitant les doublons avec le cache)
                 mifareKeys.forEach { key ->
                     val hex = key.joinToString("") { "%02X".format(it) }
                     if (!foundKeysCache.contains(hex)) {
@@ -222,34 +235,27 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                     }
                 }
 
-                // 2. On essaie de trouver une clé qui permet la LECTURE
                 for (key in keysToTest) {
                     val keyHex = key.joinToString("") { "%02X".format(it) }
-                    
-                    // Test Clé A
                     if (mifare.authenticateSectorWithKeyA(i, key)) {
                         try {
                             mifare.readBlock(mifare.sectorToBlock(i))
                             authenticated = true
                             authKeyType = "A"
                             usedKey = keyHex
-                            foundKeysCache.add(keyHex) // On mémorise la clé gagnante
+                            foundKeysCache.add(keyHex)
                             break 
-                        } catch (e: Exception) {
-                        }
+                        } catch (e: Exception) {}
                     }
-                    
-                    // Test Clé B
                     if (mifare.authenticateSectorWithKeyB(i, key)) {
                         try {
                             mifare.readBlock(mifare.sectorToBlock(i))
                             authenticated = true
                             authKeyType = "B"
                             usedKey = keyHex
-                            foundKeysCache.add(keyHex) // On mémorise la clé gagnante
+                            foundKeysCache.add(keyHex)
                             break
-                        } catch (e: Exception) {
-                        }
+                        } catch (e: Exception) {}
                     }
                 }
                 
@@ -258,13 +264,21 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                     val blockCount = mifare.getBlockCountInSector(i)
                     val firstBlock = mifare.sectorToBlock(i)
                     for (j in 0 until blockCount) {
+                        val blockIndex = firstBlock + j
                         try {
-                            val data = mifare.readBlock(firstBlock + j)
+                            val data = mifare.readBlock(blockIndex)
                             val hexData = data.joinToString("") { "%02X".format(it) }
                             val asciiData = String(data).map { if (it in ' '..'~') it else '.' }.joinToString("")
-                            sb.append("  Block ${firstBlock + j}: $hexData [$asciiData]\n")
+                            sb.append("  Block $blockIndex: $hexData [$asciiData]\n")
+                            
+                            // On ne sauvegarde QUE les blocs de données (pas le bloc 0, pas les trailers)
+                            val isTrailer = (blockIndex + 1) % 4 == 0
+                            val isManufacturer = blockIndex == 0
+                            if (!isTrailer && !isManufacturer) {
+                                rawDataList.add("$blockIndex:$hexData:$authKeyType:$usedKey")
+                            }
                         } catch (e: Exception) {
-                            sb.append("  Block ${firstBlock + j}: Error reading (Permissions restricted)\n")
+                            sb.append("  Block $blockIndex: Error reading (Permissions restricted)\n")
                         }
                     }
                 } else {
@@ -278,7 +292,40 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
             try { mifare.close() } catch (e: Exception) {}
         }
         
-        return sb.toString()
+        return Pair(sb.toString(), if (rawDataList.isEmpty()) null else rawDataList.joinToString(";"))
+    }
+
+    private fun writeMifareBlock(tag: Tag, blockData: String): String {
+        // blockData format: "index:hexData:keyType:keyHex"
+        val parts = blockData.split(":")
+        if (parts.size < 4) return "Format invalide"
+        
+        val blockIndex = parts[0].toInt()
+        val data = hexToByteArray(parts[1])
+        val keyType = parts[2]
+        val key = hexToByteArray(parts[3])
+        val sectorIndex = blockIndex / 4
+
+        val mifare = MifareClassic.get(tag) ?: return "Incompatible"
+        return try {
+            mifare.connect()
+            val auth = if (keyType == "A") {
+                mifare.authenticateSectorWithKeyA(sectorIndex, key)
+            } else {
+                mifare.authenticateSectorWithKeyB(sectorIndex, key)
+            }
+
+            if (auth) {
+                mifare.writeBlock(blockIndex, data)
+                "Succès Bloc $blockIndex"
+            } else {
+                "Auth échouée Secteur $sectorIndex"
+            }
+        } catch (e: Exception) {
+            "Erreur: ${e.localizedMessage}"
+        } finally {
+            try { mifare.close() } catch (e: Exception) {}
+        }
     }
 
     private fun readNdefContent(tag: Tag): String {
@@ -426,7 +473,7 @@ fun HistoryScreen(viewModel: MainViewModel) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(devices) { device ->
-                    DeviceItem(device, dateFormat)
+                    DeviceItem(device, dateFormat, viewModel)
                 }
             }
         }
@@ -434,15 +481,42 @@ fun HistoryScreen(viewModel: MainViewModel) {
 }
 
 @Composable
-fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat) {
+fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat, viewModel: MainViewModel) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = "Serial: ${device.serialNumber}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Text(text = "Technologies: ${device.techList}", style = MaterialTheme.typography.bodySmall)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Serial: ${device.serialNumber}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text(text = "Technologies: ${device.techList}", style = MaterialTheme.typography.bodySmall)
+                }
+                
+                // Bouton Restaurer si des données brutes existent
+                if (device.rawData != null) {
+                    Button(
+                        onClick = {
+                            viewModel.setPendingRestore(device.rawData)
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (viewModel.pendingRestore.collectAsState().value == device.rawData) 
+                                Color(0xFFFFA500) else MaterialTheme.colorScheme.secondary
+                        ),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text(if (viewModel.pendingRestore.collectAsState().value == device.rawData) "Ready" else "Restore", fontSize = 12.sp)
+                    }
+                }
+            }
+
             Text(text = "Extra: ${device.extraInfo}", style = MaterialTheme.typography.bodySmall)
+            
             if (device.content.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(text = "Contenu:", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
@@ -458,6 +532,15 @@ fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat) {
                     )
                 }
             }
+            
+            if (viewModel.pendingRestore.collectAsState().value == device.rawData) {
+                Text(
+                    "⚠️ Mode Restauration activé. Activez le scan et présentez le badge pour réécrire les données.",
+                    color = Color.Red,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "Detected at: ${dateFormat.format(Date(device.timestamp))}",

@@ -22,17 +22,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _lastDetectedTag = MutableStateFlow<NfcDevice?>(null)
     val lastDetectedTag: StateFlow<NfcDevice?> = _lastDetectedTag.asStateFlow()
 
+    private val _pendingRestore = MutableStateFlow<String?>(null)
+    val pendingRestore: StateFlow<String?> = _pendingRestore.asStateFlow()
+
     fun setScanning(scanning: Boolean) {
         _isScanning.value = scanning
     }
 
-    fun addDevice(serialNumber: String, techList: String, extraInfo: String, content: String) {
+    fun setPendingRestore(rawData: String?) {
+        _pendingRestore.value = rawData
+    }
+
+    fun addDevice(serialNumber: String, techList: String, extraInfo: String, content: String, rawData: String? = null) {
         viewModelScope.launch {
             val device = NfcDevice(
                 serialNumber = serialNumber,
                 techList = techList,
                 extraInfo = extraInfo,
-                content = content
+                content = content,
+                rawData = rawData
             )
             nfcDeviceDao.insert(device)
             _lastDetectedTag.value = device
