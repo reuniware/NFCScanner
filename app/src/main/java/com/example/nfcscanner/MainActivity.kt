@@ -280,6 +280,10 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                             if (!isTrailer && !isManufacturer) {
                                 rawDataList.add("$blockIndex:$hexData:$authKeyType:$usedKey")
                             }
+                            
+                            // Mise en évidence du Bloc 37 (Candidat Solde)
+                            val blockPrefix = if (blockIndex == 37) "⭐ Block" else "  Block"
+                            sb.append("$blockPrefix $blockIndex: $hexData [$asciiData]\n")
                         } catch (e: Exception) {
                             sb.append("  Block $blockIndex: Error reading (Permissions restricted)\n")
                         }
@@ -609,7 +613,8 @@ fun ComparisonView(oldDevice: NfcDevice, newDevice: NfcDevice) {
             val oldData = oldBlockStr?.split(":")?.getOrNull(1)
             
             if (oldData != null && oldData != newData) {
-                diffs.add("Block $index: $oldData -> $newData")
+                val prefix = if (index == "37") "💰 " else ""
+                diffs.add("$prefix Block $index: $oldData -> $newData")
             }
         }
     }
