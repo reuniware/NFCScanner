@@ -632,42 +632,46 @@ fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat, viewModel: MainV
                 Row {
                     // Bouton Comparer
                     if (device.rawData != null) {
-                        IconButton(
-                            onClick = {
-                                if (selectedForCompare == null) {
-                                    viewModel.setSelectedForCompare(device)
-                                } else if (selectedForCompare?.id == device.id) {
-                                    viewModel.setSelectedForCompare(null)
+                        Box(modifier = Modifier.clickable(enabled = false) {}) { // Bloque la propagation
+                            IconButton(
+                                onClick = {
+                                    if (selectedForCompare == null) {
+                                        viewModel.setSelectedForCompare(device)
+                                    } else if (selectedForCompare?.id == device.id) {
+                                        viewModel.setSelectedForCompare(null)
+                                    }
                                 }
+                            ) {
+                                Icon(
+                                    Icons.Default.CompareArrows,
+                                    contentDescription = "Compare",
+                                    tint = if (isSelectedForCompare) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                )
                             }
-                        ) {
-                            Icon(
-                                Icons.Default.CompareArrows,
-                                contentDescription = "Compare",
-                                tint = if (isSelectedForCompare) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                            )
                         }
                     }
 
                     // Bouton Restaurer si des données brutes existent
                     if (device.rawData != null) {
                         val isPending = viewModel.pendingRestore.collectAsState().value == device.rawData
-                        Button(
-                            onClick = {
-                                if (isPending) {
-                                    viewModel.setPendingRestore(null)
-                                } else {
-                                    viewModel.setPendingRestore(device.rawData)
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isPending) 
-                                    Color(0xFFFFA500) else MaterialTheme.colorScheme.secondary
-                            ),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            modifier = Modifier.height(32.dp)
-                        ) {
-                            Text(if (isPending) "Cancel" else "Restore", fontSize = 12.sp)
+                        Box(modifier = Modifier.clickable(enabled = false) {}) { // Bloque la propagation
+                            Button(
+                                onClick = {
+                                    if (isPending) {
+                                        viewModel.setPendingRestore(null)
+                                    } else {
+                                        viewModel.setPendingRestore(device.rawData)
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isPending) 
+                                        Color(0xFFFFA500) else MaterialTheme.colorScheme.secondary
+                                ),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Text(if (isPending) "Cancel" else "Restore", fontSize = 12.sp)
+                            }
                         }
                     }
                 }
