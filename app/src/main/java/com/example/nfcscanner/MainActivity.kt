@@ -201,22 +201,43 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                     }
                 }
                 var authenticated = false
-                // On essaie chaque clé du dictionnaire
+                var authKeyType = ""
+                var usedKey = ""
+
+                // On essaie d'abord de trouver une clé qui permet la LECTURE
+                // On teste chaque clé du dictionnaire en tant que Clé A puis Clé B
                 for (key in mifareKeys) {
                     val keyHex = key.joinToString("") { "%02X".format(it) }
+                    
+                    // Test Clé A
                     if (mifare.authenticateSectorWithKeyA(i, key)) {
-                        authenticated = true
-                        sb.append("Sector $i: Authenticated (Key A: $keyHex)\n")
-                        break
-                    } else if (mifare.authenticateSectorWithKeyB(i, key)) {
-                        authenticated = true
-                        sb.append("Sector $i: Authenticated (Key B: $keyHex)\n")
-                        break
+                        try {
+                            mifare.readBlock(mifare.sectorToBlock(i))
+                            authenticated = true
+                            authKeyType = "A"
+                            usedKey = keyHex
+                            break 
+                        } catch (e: Exception) {
+                            // Authentifié mais lecture impossible, on continue pour chercher Clé B
+                        }
+                    }
+                    
+                    // Test Clé B
+                    if (mifare.authenticateSectorWithKeyB(i, key)) {
+                        try {
+                            mifare.readBlock(mifare.sectorToBlock(i))
+                            authenticated = true
+                            authKeyType = "B"
+                            usedKey = keyHex
+                            break
+                        } catch (e: Exception) {
+                            // Authentifié mais lecture impossible
+                        }
                     }
                 }
                 
                 if (authenticated) {
-                    sb.append("Sector $i: Authenticated (Key A)\n")
+                    sb.append("Sector $i: Authenticated (Key $authKeyType: $usedKey)\n")
                     val blockCount = mifare.getBlockCountInSector(i)
                     val firstBlock = mifare.sectorToBlock(i)
                     for (j in 0 until blockCount) {
@@ -226,11 +247,11 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                             val asciiData = String(data).map { if (it in ' '..'~') it else '.' }.joinToString("")
                             sb.append("  Block ${firstBlock + j}: $hexData [$asciiData]\n")
                         } catch (e: Exception) {
-                            sb.append("  Block ${firstBlock + j}: Error reading\n")
+                            sb.append("  Block ${firstBlock + j}: Error reading (Permissions restricted)\n")
                         }
                     }
                 } else {
-                    sb.append("Sector $i: Authentication failed\n")
+                    sb.append("Sector $i: Authentication failed or Read access denied\n")
                 }
             }
             mifare.close()
