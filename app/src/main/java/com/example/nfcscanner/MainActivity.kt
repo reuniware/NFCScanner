@@ -43,6 +43,7 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
     private val viewModel: MainViewModel by viewModels()
     private var nfcAdapter: NfcAdapter? = null
     private var mifareKeys: List<ByteArray> = emptyList()
+    private val foundKeysCache = mutableSetOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -187,9 +188,13 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
         val mifare = MifareClassic.get(tag) ?: return ""
         val sb = StringBuilder()
         
+        // On vide le cache des clés trouvées pour un nouveau tag physique
+        // ou on le garde si on veut accélérer les scans de badges identiques à la suite
+        // Restons sur un cache par session d'application pour maximiser la vitesse.
+        
         try {
             mifare.connect()
-            mifare.timeout = 5000 // Augmente le timeout à 5 secondes pour les scans longs
+            mifare.timeout = 5000 
             val sectorCount = mifare.sectorCount
             sb.append("Mifare Classic (${mifare.size} bytes)\n")
             
@@ -204,9 +209,21 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                 var authKeyType = ""
                 var usedKey = ""
 
-                // On essaie d'abord de trouver une clé qui permet la LECTURE
-                // On teste chaque clé du dictionnaire en tant que Clé A puis Clé B
-                for (key in mifareKeys) {
+                // 1. On prépare la liste des clés à tester
+                // On met en priorité les clés qui ont déjà fonctionné (Cache)
+                val keysToTest = mutableListOf<ByteArray>()
+                foundKeysCache.forEach { keysToTest.add(hexToByteArray(it)) }
+                
+                // On ajoute les clés du dictionnaire (en évitant les doublons avec le cache)
+                mifareKeys.forEach { key ->
+                    val hex = key.joinToString("") { "%02X".format(it) }
+                    if (!foundKeysCache.contains(hex)) {
+                        keysToTest.add(key)
+                    }
+                }
+
+                // 2. On essaie de trouver une clé qui permet la LECTURE
+                for (key in keysToTest) {
                     val keyHex = key.joinToString("") { "%02X".format(it) }
                     
                     // Test Clé A
@@ -216,9 +233,9 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                             authenticated = true
                             authKeyType = "A"
                             usedKey = keyHex
+                            foundKeysCache.add(keyHex) // On mémorise la clé gagnante
                             break 
                         } catch (e: Exception) {
-                            // Authentifié mais lecture impossible, on continue pour chercher Clé B
                         }
                     }
                     
@@ -229,9 +246,9 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                             authenticated = true
                             authKeyType = "B"
                             usedKey = keyHex
+                            foundKeysCache.add(keyHex) // On mémorise la clé gagnante
                             break
                         } catch (e: Exception) {
-                            // Authentifié mais lecture impossible
                         }
                     }
                 }
