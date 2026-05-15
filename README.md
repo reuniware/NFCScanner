@@ -20,57 +20,45 @@ NFCScanner transforme votre smartphone en un véritable laboratoire NFC. Contrai
 - **Cache Dynamique de Clés** : Mémorise les clés fonctionnelles pendant le scan pour accélérer la lecture des secteurs suivants. Réduit le temps de scan de 20 secondes à moins de 2 secondes pour les badges connus.
 - **Robustesse NFC** : Timeout étendu à 5000ms et reconnexion automatique pour stabiliser la lecture même en cas de légers mouvements du badge.
 
-### 📊 Analyse & Comparaison (Audit)
+### 📊 Audit & Analyse
 - **Comparateur Différentiel (⇄)** : Permet de comparer deux scans pour identifier instantanément quels octets ont été modifiés (idéal pour traquer les changements de solde).
-- **Candidat Solde (💰)** : Mise en évidence automatique du **Bloc 37**, souvent utilisé pour le stockage des crédits ou compteurs dans les systèmes de distributeurs.
-- **Export Automatique** : Génère un rapport `.txt` complet dans le dossier `Downloads` à chaque scan.
+- **Candidat Solde (💰)** : Mise en évidence automatique du **Bloc 37**, souvent utilisé pour le stockage des crédits ou compteurs.
+- **Interface Ergonomique** : Historique compact avec **déploiement au clic** pour une lecture claire des informations détaillées.
 
-### 💾 Sauvegarde & Restauration (Backup/Restore)
-- **Base de données Room (v3)** : Stockage local persistant de tous vos scans, incluant les données binaires brutes (`rawData`).
+### 💾 Sauvegarde, Import & Restauration
+- **Persistance Room (v3)** : Stockage local de tous vos scans, incluant les données binaires brutes (`rawData`).
+- **Export & Import TXT Sécurisé** : Génère un rapport `.txt` dans le dossier `Downloads`. Ce fichier contient une section de données internes permettant d'**importer** à nouveau un scan dans l'application après une réinstallation.
 - **Mode Restauration Sécurisé** : Permet de réécrire les données sauvegardées sur un badge physique.
-- **Protection Anti-Brick** : L'application protège les zones sensibles (Bloc 0 et Trailers de sécurité) en les excluant de l'écriture pour éviter de rendre le badge inutilisable.
+- **Protection Anti-Brick** : Exclusion automatique des zones sensibles (Bloc 0 et Trailers de sécurité) lors de la restauration.
 
 ---
 
 ## 💡 Cas d'utilisation
 
 ### 1. Gestion de Crédit "Offline" (Ex: Machine à café, Cantine)
-- **Scénario** : Vous remarquez que votre solde augmente ou diminue mystérieusement.
 - **Usage** : Scannez le badge avant et après un achat. Utilisez la fonction **Compare** pour isoler le bloc contenant le montant. Si le système est "Offline", vous pouvez utiliser la fonction **Restore** pour récupérer un solde précédent sauvegardé.
 
 ### 2. Audit de Sécurité (Contrôle d'accès)
-- **Scénario** : Tester la résistance d'un système de badges d'entreprise.
-- **Usage** : Vérifier si les secteurs utilisent des clés d'usine par défaut (`FFFFFFFFFFFF`) ou si les données sont chiffrées. Identifier les systèmes vulnérables basés uniquement sur l'UID (Bloc 0).
+- **Usage** : Vérifier si les secteurs utilisent des clés d'usine par défaut (`FFFFFFFFFFFF`) ou si les données sont chiffrées. Identifier les systèmes vulnérables basés uniquement sur l'UID.
 
-### 3. Maintenance Industrielle & IoT
-- **Scénario** : Accéder aux informations de configuration stockées dans des tags fixés sur des machines.
-- **Usage** : Lire les données NDEF ou les blocs bruts pour extraire des numéros de série ou des dates de dernière révision.
-
-### 4. Développement & Débogage
-- **Scénario** : Vous développez une solution NFC et devez vérifier le contenu binaire réel écrit sur vos puces.
-- **Usage** : Un outil simple et portable pour valider vos algorithmes d'écriture.
+### 3. Archivage Permanent
+- **Usage** : Utilisez la fonction **Import** pour restaurer vos bibliothèques de badges depuis vos fichiers texte sauvegardés dans `Downloads`, garantissant une survie des données même après suppression de l'application.
 
 ---
 
 ## 🛠 Guide d'utilisation rapide
 
-1. **Scan Initial** :
-   - Allez dans **Home** > **Start Scanning**.
-   - Maintenez le badge immobile jusqu'au signal sonore/vibration.
-2. **Analyse** :
-   - Allez dans **History**.
-   - Cliquez sur `⇄` sur votre scan de référence.
-   - Cliquez sur un autre scan pour voir les différences (en rouge).
-3. **Restauration** :
-   - Dans **History**, cliquez sur **Restore** sur la sauvegarde souhaitée (le bouton devient orange **Cancel**).
-   - Retournez dans **Home**, activez le scan et présentez le badge.
+1. **Scanner** : Allez dans **Home** > **Start Scanning**. Maintenez le badge immobile.
+2. **Analyser** : Dans **History**, cliquez sur un badge pour voir ses détails ou sur `⇄` pour comparer.
+3. **Restaurer** : Cliquez sur **Restore** sur un ancien scan, puis présentez le badge sur l'écran d'accueil.
+4. **Importer** : Dans **History**, utilisez le bouton **Import** pour charger un fichier `.txt` généré précédemment.
 
 ---
 
 ## 🔒 Confidentialité & Sécurité
-- Toutes les données sont stockées **uniquement en local** dans la base de données SQLite de l'application.
+- Toutes les données sont stockées **uniquement en local** (SQLite + dossier Downloads).
 - Aucune donnée n'est transmise vers des serveurs tiers.
-- L'utilisation de cet outil doit se faire dans le respect des conditions d'utilisation des systèmes que vous auditez.
+- L'utilisation de cet outil doit se faire dans le respect des conditions d'utilisation des systèmes audités.
 
 ---
 *Développé avec ❤️ pour l'expertise NFC sur Android.*
