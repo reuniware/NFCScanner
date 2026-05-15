@@ -98,9 +98,11 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                             HomeScreen(viewModel)
                         }
                         composable("history") {
-                            HistoryScreen(viewModel) {
-                                importLauncher.launch("text/plain")
-                            }
+                            HistoryScreen(
+                                viewModel = viewModel,
+                                onImportClick = { importLauncher.launch("text/plain") },
+                                onClearCacheClick = { foundKeysCache.clear() }
+                            )
                         }
                     }
                 }
@@ -134,6 +136,7 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
             // Mode RESTAURATION
             val restoreData = viewModel.pendingRestore.value
             if (restoreData != null) {
+                viewModel.setProcessing(true)
                 runOnUiThread { Toast.makeText(this, "Restauration en cours...", Toast.LENGTH_SHORT).show() }
                 val results = mutableListOf<String>()
                 val mifare = MifareClassic.get(it)
@@ -147,6 +150,7 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                     results.add("Erreur connection: ${e.localizedMessage}")
                 } finally {
                     try { mifare?.close() } catch (e: Exception) {}
+                    viewModel.setProcessing(false)
                 }
 
                 viewModel.setPendingRestore(null) // Reset après tentative
@@ -156,6 +160,7 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                 return@let // On s'arrête là pour ne pas ré-enregistrer le scan
             }
 
+            viewModel.setProcessing(true)
             var content = readNdefContent(it)
             var rawData: String? = null
             
@@ -173,6 +178,7 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
             viewModel.addDevice(serialNumber, techList, extraInfo, content, rawData)
             saveScanToDownload(serialNumber, content, rawData)
             
+            viewModel.setProcessing(false)
             runOnUiThread {
                 Toast.makeText(this, "Tag Detected: $serialNumber", Toast.LENGTH_SHORT).show()
             }
@@ -208,10 +214,12 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                 val serialMatch = Regex("Serial: ([0-9A-F:]+)").find(text)
                 val serial = serialMatch?.groupValues?.get(1) ?: "Unknown"
                 
-                val rawDataSection = text.split("--- INTERNAL RAW DATA (DO NOT MODIFY) ---")
-                if (rawDataSection.size > 1) {
-                    val rawData = rawDataSection[1].trim()
-                    val content = rawDataSection[0].replace("Serial: $serial", "").trim()
+                val sectionMarker = "--- INTERNAL RAW DATA (DO NOT MODIFY) ---"
+                if (text.contains(sectionMarker)) {
+                    val rawData = text.substringAfter(sectionMarker).trim()
+                    val content = text.substringBefore(sectionMarker)
+                        .replace("Serial: $serial", "")
+                        .trim()
                     
                     viewModel.addDevice(serial, "Imported Mifare", "Imported from file", content, rawData)
                     Toast.makeText(this, "Scan importé avec succès", Toast.LENGTH_SHORT).show()
@@ -425,6 +433,7 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
 @Composable
 fun HomeScreen(viewModel: MainViewModel) {
     val isScanning by viewModel.isScanning.collectAsState()
+    val isProcessing by viewModel.isProcessing.collectAsState()
     val lastDetectedTag by viewModel.lastDetectedTag.collectAsState()
 
     Column(
@@ -447,8 +456,15 @@ fun HomeScreen(viewModel: MainViewModel) {
             contentAlignment = Alignment.Center
         ) {
             if (isScanning) {
-                CircularProgressIndicator(modifier = Modifier.fillMaxSize(), strokeWidth = 8.dp)
-                Text("Scanning...", fontWeight = FontWeight.Medium)
+                CircularProgressIndicator(
+                    modifier = Modifier.fillMaxSize(),
+                    strokeWidth = 8.dp,
+                    color = if (isProcessing) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = if (isProcessing) "Reading..." else "Scanning...",
+                    fontWeight = FontWeight.Medium
+                )
             } else {
                 Text("Idle", style = MaterialTheme.typography.bodyLarge)
             }
@@ -496,7 +512,7 @@ fun HomeScreen(viewModel: MainViewModel) {
 }
 
 @Composable
-fun HistoryScreen(viewModel: MainViewModel, onImportClick: () -> Unit) {
+fun HistoryScreen(viewModel: MainViewModel, onImportClick: () -> Unit, onClearCacheClick: () -> Unit) {
     val devices by viewModel.allDevices.collectAsState(initial = emptyList())
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
 
@@ -526,7 +542,14 @@ fun HistoryScreen(viewModel: MainViewModel, onImportClick: () -> Unit) {
             }
         }
         
-        Spacer(modifier = Modifier.height(16.dp))
+        TextButton(
+            onClick = onClearCacheClick,
+            modifier = Modifier.align(Alignment.End)
+        ) {
+            Text("Clear Keys Cache", style = MaterialTheme.typography.labelSmall)
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
 
         if (devices.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

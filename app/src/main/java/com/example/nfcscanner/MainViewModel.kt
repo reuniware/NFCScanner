@@ -19,6 +19,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
 
+    private val _isProcessing = MutableStateFlow(false)
+    val isProcessing: StateFlow<Boolean> = _isProcessing.asStateFlow()
+
     private val _lastDetectedTag = MutableStateFlow<NfcDevice?>(null)
     val lastDetectedTag: StateFlow<NfcDevice?> = _lastDetectedTag.asStateFlow()
 
@@ -30,6 +33,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setScanning(scanning: Boolean) {
         _isScanning.value = scanning
+    }
+
+    fun setProcessing(processing: Boolean) {
+        _isProcessing.value = processing
     }
 
     fun setSelectedForCompare(device: NfcDevice?) {
