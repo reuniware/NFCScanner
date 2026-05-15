@@ -14,6 +14,9 @@ interface NfcDeviceDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(device: NfcDevice)
 
+    @Query("UPDATE nfc_devices SET friendlyName = :name WHERE id = :id")
+    suspend fun updateFriendlyName(id: Int, name: String?)
+
     @Query("DELETE FROM nfc_devices")
     suspend fun deleteAll()
 }

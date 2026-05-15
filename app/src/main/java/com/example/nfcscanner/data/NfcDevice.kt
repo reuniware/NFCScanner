@@ -11,5 +11,6 @@ data class NfcDevice(
     val timestamp: Long = System.currentTimeMillis(),
     val extraInfo: String = "",
     val content: String = "",
-    val rawData: String? = null // Format JSON ou CSV pour stocker [Secteur:Bloc:Data:KeyType:KeyHex]
+    val rawData: String? = null,
+    val friendlyName: String? = null
 )

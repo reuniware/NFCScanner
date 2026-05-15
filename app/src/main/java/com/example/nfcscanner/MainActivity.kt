@@ -24,6 +24,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.CompareArrows
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -129,6 +131,8 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
     }
 
     override fun onTagDiscovered(tag: Tag?) {
+        if (viewModel.isProcessing.value) return
+
         tag?.let {
             val serialNumber = it.id.joinToString(":") { byte -> "%02X".format(byte) }
             val techList = it.techList.joinToString(", ") { tech -> tech.split(".").last() }
@@ -328,7 +332,6 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                             val data = mifare.readBlock(blockIndex)
                             val hexData = data.joinToString("") { "%02X".format(it) }
                             val asciiData = String(data).map { if (it in ' '..'~') it else '.' }.joinToString("")
-                            sb.append("  Block $blockIndex: $hexData [$asciiData]\n")
                             
                             // On ne sauvegarde QUE les blocs de données (pas le bloc 0, pas les trailers)
                             val isTrailer = (blockIndex + 1) % 4 == 0
@@ -573,6 +576,8 @@ fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat, viewModel: MainV
     val selectedForCompare by viewModel.selectedForCompare.collectAsState()
     val isSelectedForCompare = selectedForCompare?.id == device.id
     var isExpanded by remember { mutableStateOf(false) }
+    var isEditingName by remember { mutableStateOf(false) }
+    var editedName by remember { mutableStateOf(device.friendlyName ?: "") }
     
     Card(
         modifier = Modifier
@@ -589,7 +594,38 @@ fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat, viewModel: MainV
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "Serial: ${device.serialNumber}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    if (isEditingName) {
+                        OutlinedTextField(
+                            value = editedName,
+                            onValueChange = { editedName = it },
+                            label = { Text("Friendly Name") },
+                            modifier = Modifier.fillMaxWidth(),
+                            trailingIcon = {
+                                IconButton(onClick = {
+                                    viewModel.updateFriendlyName(device.id, editedName.ifBlank { null })
+                                    isEditingName = false
+                                }) {
+                                    Icon(Icons.Default.Check, contentDescription = "Save")
+                                }
+                            },
+                            singleLine = true
+                        )
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = device.friendlyName ?: "Serial: ${device.serialNumber}",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            IconButton(onClick = { isEditingName = true }, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit Name", modifier = Modifier.size(16.dp), tint = Color.Gray)
+                            }
+                        }
+                        if (device.friendlyName != null) {
+                            Text(text = "Serial: ${device.serialNumber}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        }
+                    }
                     Text(text = dateFormat.format(Date(device.timestamp)), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                 }
                 

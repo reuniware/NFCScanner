@@ -47,6 +47,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _pendingRestore.value = rawData
     }
 
+    fun updateFriendlyName(id: Int, name: String?) {
+        viewModelScope.launch {
+            nfcDeviceDao.updateFriendlyName(id, name)
+        }
+    }
+
     fun addDevice(serialNumber: String, techList: String, extraInfo: String, content: String, rawData: String? = null) {
         viewModelScope.launch {
             val device = NfcDevice(
