@@ -127,9 +127,19 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
             if (restoreData != null) {
                 runOnUiThread { Toast.makeText(this, "Restauration en cours...", Toast.LENGTH_SHORT).show() }
                 val results = mutableListOf<String>()
-                restoreData.split(";").forEach { blockInfo ->
-                    results.add(writeMifareBlock(it, blockInfo))
+                val mifare = MifareClassic.get(it)
+                try {
+                    mifare?.connect()
+                    mifare?.timeout = 5000
+                    restoreData.split(";").forEach { blockInfo ->
+                        results.add(writeMifareBlock(it, blockInfo))
+                    }
+                } catch (e: Exception) {
+                    results.add("Erreur connection: ${e.localizedMessage}")
+                } finally {
+                    try { mifare?.close() } catch (e: Exception) {}
                 }
+
                 viewModel.setPendingRestore(null) // Reset après tentative
                 runOnUiThread { 
                     Toast.makeText(this, "Résultat : ${results.last()}", Toast.LENGTH_LONG).show()
@@ -314,25 +324,30 @@ class MainActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
         val sectorIndex = blockIndex / 4
 
         val mifare = MifareClassic.get(tag) ?: return "Incompatible"
-        return try {
-            mifare.connect()
+        try {
+            if (!mifare.isConnected) {
+                mifare.connect()
+                mifare.timeout = 5000
+            }
+            
             val auth = if (keyType == "A") {
                 mifare.authenticateSectorWithKeyA(sectorIndex, key)
             } else {
                 mifare.authenticateSectorWithKeyB(sectorIndex, key)
             }
 
-            if (auth) {
+            return if (auth) {
                 mifare.writeBlock(blockIndex, data)
+                Log.d("NFCScanner", "Write success: Block $blockIndex")
                 "Succès Bloc $blockIndex"
             } else {
                 "Auth échouée Secteur $sectorIndex"
             }
         } catch (e: Exception) {
-            "Erreur: ${e.localizedMessage}"
-        } finally {
-            try { mifare.close() } catch (e: Exception) {}
+            Log.e("NFCScanner", "Write error: Block $blockIndex", e)
+            return "Erreur B$blockIndex: ${e.localizedMessage}"
         }
+        // Note: On ne ferme pas la connexion ici car writeMifareBlock est souvent appelé dans une boucle
     }
 
     private fun readNdefContent(tag: Tag): String {
