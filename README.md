@@ -1,64 +1,74 @@
 # NFCScanner Expert
 
-Une application Android de pointe développée en **Kotlin** et **Jetpack Compose**, conçue pour l'analyse, la sauvegarde et la restauration de tags NFC, avec une expertise particulière sur la technologie **Mifare Classic**.
+NFCScanner Expert est un outil Android professionnel conçu pour l'audit, l'analyse binaire et la restauration de tags NFC, avec une spécialisation poussée sur la technologie **Mifare Classic 1K**. 
 
-## 🚀 Vue d'ensemble
-
-NFCScanner transforme votre smartphone en un véritable laboratoire NFC. Contrairement aux scanners basiques, cet outil est capable de réaliser des audits profonds sur les secteurs protégés, de mémoriser l'état binaire complet d'un badge et de restaurer des données en cas de besoin.
+Cette application transforme votre smartphone en un terminal d'expertise capable de percer les protections par clés et de suivre l'évolution des données bit à bit.
 
 ---
 
-## ✨ Fonctionnalités Clés
+## 🛠 Guide Complet des Fonctionnalités
 
-### 🔍 Expertise Mifare Classic (1K)
-- **Brute-force par Dictionnaire** : Utilise des dictionnaires de clés intégrés (`std.keys`, `hotel-std.keys`, `extended-std.keys`) pour déverrouiller les secteurs protégés.
-- **Auto-Découverte de Clés** : Identifie et affiche la clé exacte (A ou B) ayant permis l'accès à chaque secteur (ex: détection de clés propriétaires comme "AZTEKM").
-- **Lecture Hexadécimale & ASCII** : Affiche le contenu brut de chaque bloc avec une tentative de traduction en texte lisible.
-- **Structure Organisée** : Visualisation claire des données regroupées par secteurs (Secteurs 0 à 15).
+### 1. Scan Profond & Découverte de Clés
+L'application ne se contente pas de lire l'ID ; elle tente d'ouvrir chaque secteur de la mémoire.
+*   **Fonctionnement** : Utilise trois dictionnaires de clés intégrés (`std`, `hotel`, `extended`) pour tester les secteurs protégés.
+*   **Auto-apprentissage** : Dès qu'une clé est trouvée (ex: la clé "AZTEKM"), elle est mise en cache pour accélérer instantanément la lecture des secteurs suivants et des futurs scans.
+*   **Utilisation** : Allez sur l'onglet **Home**, cliquez sur **Start Scanning** et maintenez le badge immobile contre le téléphone (environ 10-15s pour un premier scan complet).
 
-### ⚡ Optimisation de Performance
-- **Cache Dynamique de Clés** : Mémorise les clés fonctionnelles pendant le scan pour accélérer la lecture des secteurs suivants. Réduit le temps de scan de 20 secondes à moins de 2 secondes pour les badges connus.
-- **Robustesse NFC** : Timeout étendu à 5000ms et reconnexion automatique pour stabiliser la lecture même en cas de légers mouvements du badge.
+### 2. Analyse Binaire (Hexadécimal & ASCII)
+Visualisez le contenu exact de la puce.
+*   **Visualisation** : Les données sont regroupées par **Secteurs (0-15)**. Chaque secteur affiche ses 4 blocs de 16 octets.
+*   **Double Format** : Affichage en Hexadécimal (pour les calculs) et en ASCII (pour lire les textes cachés).
+*   **Utilisation** : Dans l'onglet **History**, cliquez sur un badge pour dérouler son contenu complet.
 
-### 📊 Audit & Analyse
-- **Comparateur Différentiel (⇄)** : Permet de comparer deux scans pour identifier instantanément quels octets ont été modifiés (idéal pour traquer les changements de solde).
-- **Candidat Solde (💰)** : Mise en évidence automatique du **Bloc 37**, souvent utilisé pour le stockage des crédits ou compteurs.
-- **Interface Ergonomique** : Historique compact avec **déploiement au clic** pour une lecture claire des informations détaillées.
+### 3. Comparateur Différentiel (⇄)
+L'outil ultime pour comprendre comment une machine (ex: distributeur de café) modifie votre badge.
+*   **Fonctionnement** : Compare deux scans bit à bit et met en évidence les changements.
+*   **Focus Solde (💰)** : Le **Bloc 37** est automatiquement surveillé. S'il change, une icône de sac d'argent apparaît, indiquant un probable mouvement de crédit.
+*   **Utilisation** : 
+    1. Dans l'historique, cliquez sur l'icône `⇄` d'un scan (il devient bleu).
+    2. Parcourez les autres scans : les différences apparaîtront automatiquement en rouge.
 
-### 💾 Sauvegarde, Import & Restauration
-- **Persistance Room (v3)** : Stockage local de tous vos scans, incluant les données binaires brutes (`rawData`).
-- **Export & Import TXT Sécurisé** : Génère un rapport `.txt` dans le dossier `Downloads`. Ce fichier contient une section de données internes permettant d'**importer** à nouveau un scan dans l'application après une réinstallation.
-- **Mode Restauration Sécurisé** : Permet de réécrire les données sauvegardées sur un badge physique.
-- **Protection Anti-Brick** : Exclusion automatique des zones sensibles (Bloc 0 et Trailers de sécurité) lors de la restauration.
+### 4. Sauvegarde & Importation Sécurisée (TXT)
+Ne perdez jamais vos données, même si vous changez de téléphone.
+*   **Export Auto** : Chaque scan génère un fichier `.txt` détaillé dans le dossier `Downloads` de votre Android.
+*   **Format d'Archive** : Le fichier contient une section "INTERNAL RAW DATA" cryptique mais essentielle pour la reconstruction.
+*   **Importation** : Cliquez sur le bouton **Import** dans l'historique pour recharger un scan depuis un ancien fichier texte.
 
----
+### 5. Restauration de Données (Restore)
+Réécrivez les informations sauvegardées sur un badge physique.
+*   **Sécurité "Anti-Brick"** : L'application interdit l'écriture sur le Bloc 0 (ID) et les secteurs de sécurité (Trailers) pour éviter de détruire définitivement votre badge. Seules les **données** sont restaurées.
+*   **Utilisation** :
+    1. Cliquez sur **Restore** sur un scan de l'historique (le bouton devient orange **Cancel**).
+    2. Retournez à l'accueil, lancez le scan et présentez le badge. L'application réinjectera les données originales.
 
-## 💡 Cas d'utilisation
-
-### 1. Gestion de Crédit "Offline" (Ex: Machine à café, Cantine)
-- **Usage** : Scannez le badge avant et après un achat. Utilisez la fonction **Compare** pour isoler le bloc contenant le montant. Si le système est "Offline", vous pouvez utiliser la fonction **Restore** pour récupérer un solde précédent sauvegardé.
-
-### 2. Audit de Sécurité (Contrôle d'accès)
-- **Usage** : Vérifier si les secteurs utilisent des clés d'usine par défaut (`FFFFFFFFFFFF`) ou si les données sont chiffrées. Identifier les systèmes vulnérables basés uniquement sur l'UID.
-
-### 3. Archivage Permanent
-- **Usage** : Utilisez la fonction **Import** pour restaurer vos bibliothèques de badges depuis vos fichiers texte sauvegardés dans `Downloads`, garantissant une survie des données même après suppression de l'application.
-
----
-
-## 🛠 Guide d'utilisation rapide
-
-1. **Scanner** : Allez dans **Home** > **Start Scanning**. Maintenez le badge immobile.
-2. **Analyser** : Dans **History**, cliquez sur un badge pour voir ses détails ou sur `⇄` pour comparer.
-3. **Restaurer** : Cliquez sur **Restore** sur un ancien scan, puis présentez le badge sur l'écran d'accueil.
-4. **Importer** : Dans **History**, utilisez le bouton **Import** pour charger un fichier `.txt` généré précédemment.
+### 6. Gestion Personnalisée (Friendly Name)
+Identifiez vos badges plus facilement que par leur numéro de série.
+*   **Utilisation** : Cliquez sur l'icône **crayon** ✏️ à côté d'un badge dans l'historique, saisissez un nom (ex: "Badge Cantine"), et validez avec la **coche** ✅.
 
 ---
 
-## 🔒 Confidentialité & Sécurité
-- Toutes les données sont stockées **uniquement en local** (SQLite + dossier Downloads).
-- Aucune donnée n'est transmise vers des serveurs tiers.
-- L'utilisation de cet outil doit se faire dans le respect des conditions d'utilisation des systèmes audités.
+## 💡 Cas d'Utilisation Pratiques
+
+| Contexte | Action NFCScanner |
+| :--- | :--- |
+| **Machine à café / Lavomatique** | Comparer le badge avant/après achat pour identifier le bloc du solde. |
+| **Contrôle d'accès** | Vérifier si le badge utilise des clés d'usine vulnérables (`FFFFFFFFFFFF`). |
+| **Sécurité des données** | Détecter si des informations personnelles (nom, ID employé) sont stockées en clair. |
+| **Sauvegarde de secours** | Créer une image de votre badge pour le restaurer s'il est corrompu par un lecteur défectueux. |
 
 ---
-*Développé avec ❤️ pour l'expertise NFC sur Android.*
+
+## ⚙️ Optimisations Techniques
+
+- **Timeout Robuste** : Délai de réponse porté à 5000ms pour éviter les erreurs "Tag lost".
+- **Multi-Thread** : Le scan s'effectue en arrière-plan pour ne pas bloquer l'interface.
+- **Base de données Room v4** : Stockage local ultra-rapide et structuré.
+- **Processing Lock** : Protection contre les déclenchements multiples lors d'un scan long.
+
+---
+
+## 🔒 Confidentialité
+Toutes les opérations sont effectuées **localement**. Aucune donnée binaire, aucune clé et aucun identifiant ne sont transmis vers l'extérieur. Vos fichiers de sauvegarde restent dans votre dossier `Downloads` sous votre contrôle exclusif.
+
+---
+*Développé pour les passionnés de technologie NFC et les experts en sécurité.*
