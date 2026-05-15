@@ -12,12 +12,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -482,9 +485,15 @@ fun HistoryScreen(viewModel: MainViewModel) {
 
 @Composable
 fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat, viewModel: MainViewModel) {
+    val selectedForCompare by viewModel.selectedForCompare.collectAsState()
+    val isSelectedForCompare = selectedForCompare?.id == device.id
+    
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(2.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(if (isSelectedForCompare) 8.dp else 2.dp),
+        border = if (isSelectedForCompare) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -497,27 +506,53 @@ fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat, viewModel: MainV
                     Text(text = "Technologies: ${device.techList}", style = MaterialTheme.typography.bodySmall)
                 }
                 
-                // Bouton Restaurer si des données brutes existent
-                if (device.rawData != null) {
-                    Button(
-                        onClick = {
-                            viewModel.setPendingRestore(device.rawData)
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (viewModel.pendingRestore.collectAsState().value == device.rawData) 
-                                Color(0xFFFFA500) else MaterialTheme.colorScheme.secondary
-                        ),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                        modifier = Modifier.height(32.dp)
-                    ) {
-                        Text(if (viewModel.pendingRestore.collectAsState().value == device.rawData) "Ready" else "Restore", fontSize = 12.sp)
+                Row {
+                    // Bouton Comparer
+                    if (device.rawData != null) {
+                        IconButton(
+                            onClick = {
+                                if (selectedForCompare == null) {
+                                    viewModel.setSelectedForCompare(device)
+                                } else if (selectedForCompare?.id == device.id) {
+                                    viewModel.setSelectedForCompare(null)
+                                } else {
+                                    // Effectuer la comparaison (logique d'affichage à intégrer)
+                                }
+                            }
+                        ) {
+                            Icon(
+                                Icons.Default.CompareArrows,
+                                contentDescription = "Compare",
+                                tint = if (isSelectedForCompare) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
+
+                    // Bouton Restaurer si des données brutes existent
+                    if (device.rawData != null) {
+                        Button(
+                            onClick = {
+                                viewModel.setPendingRestore(device.rawData)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (viewModel.pendingRestore.collectAsState().value == device.rawData) 
+                                    Color(0xFFFFA500) else MaterialTheme.colorScheme.secondary
+                            ),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text(if (viewModel.pendingRestore.collectAsState().value == device.rawData) "Ready" else "Restore", fontSize = 12.sp)
+                        }
                     }
                 }
             }
 
             Text(text = "Extra: ${device.extraInfo}", style = MaterialTheme.typography.bodySmall)
             
-            if (device.content.isNotEmpty()) {
+            // Affichage de la comparaison si un autre badge est sélectionné
+            if (selectedForCompare != null && selectedForCompare?.id != device.id && device.rawData != null && selectedForCompare?.rawData != null) {
+                ComparisonView(selectedForCompare!!, device)
+            } else if (device.content.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(text = "Contenu:", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
                 Surface(
@@ -547,6 +582,47 @@ fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat, viewModel: MainV
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.Gray
             )
+        }
+    }
+}
+
+@Composable
+fun ComparisonView(oldDevice: NfcDevice, newDevice: NfcDevice) {
+    val oldBlocks = oldDevice.rawData?.split(";") ?: emptyList()
+    val newBlocks = newDevice.rawData?.split(";") ?: emptyList()
+    
+    val diffs = mutableListOf<String>()
+    
+    // Comparaison bloc par bloc
+    newBlocks.forEach { newBlockStr ->
+        val parts = newBlockStr.split(":")
+        if (parts.size >= 2) {
+            val index = parts[0]
+            val newData = parts[1]
+            
+            val oldBlockStr = oldBlocks.find { it.startsWith("$index:") }
+            val oldData = oldBlockStr?.split(":")?.getOrNull(1)
+            
+            if (oldData != null && oldData != newData) {
+                diffs.add("Block $index: $oldData -> $newData")
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .background(Color(0xFFFFEBEE), MaterialTheme.shapes.small)
+            .padding(8.dp)
+    ) {
+        Text("Différences détectées :", fontWeight = FontWeight.Bold, color = Color.Red, fontSize = 12.sp)
+        if (diffs.isEmpty()) {
+            Text("Aucune différence dans les données de secteurs.", fontSize = 11.sp)
+        } else {
+            diffs.forEach { diff ->
+                Text(diff, fontSize = 11.sp, color = Color.DarkGray)
+            }
         }
     }
 }

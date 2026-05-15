@@ -25,8 +25,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _pendingRestore = MutableStateFlow<String?>(null)
     val pendingRestore: StateFlow<String?> = _pendingRestore.asStateFlow()
 
+    private val _selectedForCompare = MutableStateFlow<NfcDevice?>(null)
+    val selectedForCompare: StateFlow<NfcDevice?> = _selectedForCompare.asStateFlow()
+
     fun setScanning(scanning: Boolean) {
         _isScanning.value = scanning
+    }
+
+    fun setSelectedForCompare(device: NfcDevice?) {
+        _selectedForCompare.value = device
     }
 
     fun setPendingRestore(rawData: String?) {
