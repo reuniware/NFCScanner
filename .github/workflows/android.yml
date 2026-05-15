@@ -1,15 +1,14 @@
-name: Android CI
+name: Android CI & Auto Release
 
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Requis pour créer la release et le tag
 
     steps:
     - uses: actions/checkout@v4
@@ -27,8 +26,18 @@ jobs:
     - name: Build with Gradle
       run: ./gradlew assembleDebug
 
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
       with:
-        name: nfc-scanner-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
+        tag_name: v1.0.${{ github.run_number }}
+        name: NFCScanner v1.0.${{ github.run_number }}
+        body: |
+          Compilation automatique de la version v1.0.${{ github.run_number }}
+          
+          Modifications incluses dans ce build :
+          ${{ github.event.head_commit.message }}
+        files: app/build/outputs/apk/debug/app-debug.apk
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
