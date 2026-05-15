@@ -530,18 +530,23 @@ fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat, viewModel: MainV
 
                     // Bouton Restaurer si des données brutes existent
                     if (device.rawData != null) {
+                        val isPending = viewModel.pendingRestore.collectAsState().value == device.rawData
                         Button(
                             onClick = {
-                                viewModel.setPendingRestore(device.rawData)
+                                if (isPending) {
+                                    viewModel.setPendingRestore(null)
+                                } else {
+                                    viewModel.setPendingRestore(device.rawData)
+                                }
                             },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (viewModel.pendingRestore.collectAsState().value == device.rawData) 
+                                containerColor = if (isPending) 
                                     Color(0xFFFFA500) else MaterialTheme.colorScheme.secondary
                             ),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                             modifier = Modifier.height(32.dp)
                         ) {
-                            Text(if (viewModel.pendingRestore.collectAsState().value == device.rawData) "Ready" else "Restore", fontSize = 12.sp)
+                            Text(if (isPending) "Cancel" else "Restore", fontSize = 12.sp)
                         }
                     }
                 }
