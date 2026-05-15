@@ -582,14 +582,15 @@ fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat, viewModel: MainV
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clickable { isExpanded = !isExpanded },
+            .padding(vertical = 4.dp),
         elevation = CardDefaults.cardElevation(if (isSelectedForCompare) 8.dp else 2.dp),
         border = if (isSelectedForCompare) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isExpanded = !isExpanded },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
