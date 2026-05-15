@@ -654,24 +654,28 @@ fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat, viewModel: MainV
 
                     // Bouton Restaurer si des données brutes existent
                     if (device.rawData != null) {
-                        val isPending = viewModel.pendingRestore.collectAsState().value == device.rawData
+                        val pendingRestore by viewModel.pendingRestore.collectAsState()
+                        // On identifie de manière unique si CE scan est en cours de restauration
+                        val isThisOnePending = pendingRestore != null && pendingRestore == device.rawData && isExpanded
+                        
                         Box(modifier = Modifier.clickable(enabled = false) {}) { // Bloque la propagation
                             Button(
                                 onClick = {
-                                    if (isPending) {
+                                    if (isThisOnePending) {
                                         viewModel.setPendingRestore(null)
                                     } else {
                                         viewModel.setPendingRestore(device.rawData)
+                                        isExpanded = true // On s'assure qu'il est ouvert pour voir le message
                                     }
                                 },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isPending) 
+                                    containerColor = if (isThisOnePending) 
                                         Color(0xFFFFA500) else MaterialTheme.colorScheme.secondary
                                 ),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                 modifier = Modifier.height(32.dp)
                             ) {
-                                Text(if (isPending) "Cancel" else "Restore", fontSize = 12.sp)
+                                Text(if (isThisOnePending) "Cancel" else "Restore", fontSize = 12.sp)
                             }
                         }
                     }
@@ -703,7 +707,7 @@ fun DeviceItem(device: NfcDevice, dateFormat: SimpleDateFormat, viewModel: MainV
                         }
                     }
                     
-                    if (viewModel.pendingRestore.collectAsState().value == device.rawData) {
+                    if (viewModel.pendingRestore.collectAsState().value == device.rawData && isExpanded) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             "⚠️ Mode Restauration activé. Activez le scan et présentez le badge pour réécrire les données.",
